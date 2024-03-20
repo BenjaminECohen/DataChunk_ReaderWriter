@@ -1,0 +1,481 @@
+000011F4 Starting Address
+Assembler used: EASy68K Editor/Assembler v5.16.01
+Created On: 10/24/2023 6:47:06 PM
+
+00000000                             1  *-----------------------------------------------------------
+00000000                             2  * Title      : Output.bin Reader
+00000000                             3  * Written by :
+00000000                             4  * Date       :
+00000000                             5  * Description:
+00000000                             6  *-----------------------------------------------------------
+00000000                             7  
+00000000                             8  ALL_REG         REG         D0-D7/A0-A6
+00000000                             9  
+00000000                            10  *Tasks
+00000000                            11  
+00000000  =0000000D                 12  DISPLAY_STRING_CR       EQU     13
+00000000  =0000000E                 13  DISPLAY_STRING_NCR      EQU     14
+00000000  =00000012                 14  DISPLAY_GETNUM_CR       EQU     18
+00000000  =0000000F                 15  DISPLAY_UNUM            EQU     15
+00000000                            16  
+00000000  =0000000A                 17  DECIMAL                 EQU     10
+00000000                            18  
+00000000                            19  *ReadSection Stack Vars
+00000000  =00000000                 20  SECTION                 EQU     0
+00000000  =00000020                 21  FILE_ADDRESS            EQU     32
+00000000                            22  
+00000000                            23  *File Header
+00000000  =00000000                 24  HEADER_SECTIONS         EQU     0
+00000000  =00000004                 25  HEADER_SECT_OFFSET      EQU     4
+00000000  =00000004                 26  HEADER_SECT_SIZE        EQU     4
+00000000                            27  
+00000000                            28  *Section Header
+00000000  =00000002                 29  SECT_BYTE_OFFSET        EQU     2
+00000000  =00000004                 30  SECT_BYTE_SIZE          EQU     4
+00000000  =00000006                 31  SECT_WORD_OFFSET        EQU     6
+00000000  =00000008                 32  SECT_WORD_SIZE          EQU     8
+00000000  =0000000A                 33  SECT_LONG_OFFSET        EQU     10
+00000000  =0000000C                 34  SECT_LONG_SIZE          EQU     12
+00000000                            35  
+00000000                            36  *PrintNum
+00000000  =00000000                 37  NUM_TO_PRINT            EQU     0
+00000000                            38  
+00000000                            39  *PrintFloat
+00000000  =00000000                 40  DIV_NUM                 EQU     0
+00000000  =00000004                 41  DIVISOR                 EQU     4
+00000000                            42  
+00001000                            43      ORG    $1000
+00001000                            44      
+00001000                            45  ;Num to print in d0    
+00001000                            46  PrintNum:
+00001000  48E7 FFFE                 47      movem.l ALL_REG,-(sp)
+00001004                            48      
+00001004  700F                      49      move.l  #DISPLAY_UNUM,d0
+00001006  222F 0000                 50      move.l  NUM_TO_PRINT(sp),d1
+0000100A  740A                      51      move.l  #DECIMAL,d2
+0000100C  4E4F                      52      TRAP    #15
+0000100E                            53  
+0000100E  4CDF 7FFF                 54      movem.l (sp)+,ALL_REG
+00001012  4E75                      55      rts    
+00001014                            56  
+00001014                            57  ;num to convert in d0
+00001014                            58  Long_ToBigEndian:
+00001014  E158                      59      rol.w   #$08,d0
+00001016  4840                      60      swap    d0
+00001018  E158                      61      rol.w   #$08,d0
+0000101A  4E75                      62      rts
+0000101C                            63      
+0000101C                            64  Word_ToBigEndian:
+0000101C  E158                      65      rol.w   #$08,d0
+0000101E  4E75                      66      rts    
+00001020                            67  
+00001020                            68  ;Num to print in d0
+00001020                            69  ;Divisor in d1
+00001020                            70  PrintFloat:
+00001020  48E7 FFFE                 71      movem.l ALL_REG,-(sp)
+00001024                            72      
+00001024                            73       
+00001024  262F 0000                 74      move.l  DIV_NUM(sp),d3         ;Get the predivided register
+00001028                            75      
+00001028                            76      
+00001028  700F                      77      move.l  #DISPLAY_UNUM,d0   
+0000102A  4281                      78      clr.l   d1 
+0000102C  3203                      79      move.w  d3,d1                   ;Move quotient to d1
+0000102E  740A                      80      move.l  #DECIMAL,d2
+00001030  4E4F                      81      TRAP    #15
+00001032                            82      
+00001032  4281                      83      clr.l   d1
+00001034  4843                      84      swap    d3                          ;move remainder to lower word
+00001036  3203                      85      move.w  d3,d1                       ;move remainder to d1
+00001038  C2FC 03E8                 86      mulu.w  #1000,d1                    ;Multiply by 1000 to get 3 decimal places
+0000103C  242F 0004                 87      move.l  DIVISOR(sp),d2              ;Get Divisor
+00001040  82C2                      88      divu.w  d2,d1                       ;Divide d1 by original divisor
+00001042                            89      
+00001042  4841                      90      swap    d1
+00001044  323C 0000                 91      move.w  #0,d1                       ;Clear Remainder from quotient
+00001048  4841                      92      swap    d1
+0000104A                            93      
+0000104A  2001                      94      move.l  d1,d0                      ;Move decimal (3 places) to d0
+0000104C                            95      
+0000104C                            96      ;---
+0000104C                            97      ;ROUNDING: See if remainder of decimal / 10 is >= 5
+0000104C                            98      ;---
+0000104C  80FC 000A                 99      divu.w  #10,d0                      ;Divide by 10
+00001050  4840                     100      swap    d0
+00001052  B07C 0005                101      cmp.w   #5,d0                       ;Remainder greater than 5?
+00001056  6D00 0006                102      BLT     CheckLeadZero
+0000105A                           103      
+0000105A                           104      ;Round up
+0000105A  0641 000A                105      addi.w  #10,d1
+0000105E                           106      
+0000105E                           107  CheckLeadZero
+0000105E  82FC 000A                108      divu.w  #10,d1          ;1000/ 10 = 100, the decimal place we want
+00001062  4841                     109      swap    d1
+00001064  323C 0000                110      move.w  #0,d1                    ;Clear Remainder from quotient
+00001068  4841                     111      swap    d1
+0000106A                           112      
+0000106A  0C81 0000000A            113      cmpi.l  #10,d1
+00001070  6D00 0010                114      BLT     .pf_leadZero
+00001074                           115      
+00001074  43F9 0000DD46            116      lea     S_Period,a1
+0000107A  700E                     117      move.l  #DISPLAY_STRING_NCR,d0
+0000107C  4E4F                     118      TRAP    #15
+0000107E  6000 000C                119      BRA     .pf_float
+00001082                           120      
+00001082                           121  .pf_leadZero
+00001082  43F9 0000DD43            122      lea     S_LeadZero,a1
+00001088  700E                     123      move.l  #DISPLAY_STRING_NCR,d0
+0000108A  4E4F                     124      TRAP    #15
+0000108C                           125      
+0000108C                           126  .pf_float    
+0000108C  700F                     127      move.l  #DISPLAY_UNUM,d0   
+0000108E  740A                     128      move.l  #DECIMAL,d2
+00001090  4E4F                     129      TRAP    #15
+00001092                           130      
+00001092  4CDF 7FFF                131      movem.l (sp)+,ALL_REG
+00001096  4E75                     132      rts     
+00001098                           133      
+00001098                           134      
+00001098                           135      
+00001098                           136  
+00001098                           137  ;address to file in a0
+00001098                           138  ;Section to read in d0
+00001098                           139  
+00001098                           140  ReadSection
+00001098                           141  
+00001098  48E7 FFFE                142      movem.l ALL_REG,-(sp)
+0000109C                           143      
+0000109C  43F9 0000DCF3            144      lea     NewLine,a1
+000010A2  700D                     145      move.l  #DISPLAY_STRING_CR,d0
+000010A4  4E4F                     146      TRAP    #15
+000010A6                           147      
+000010A6                           148      *Clear data
+000010A6  4280                     149      clr.l   d0
+000010A8  4281                     150      clr.l   d1
+000010AA                           151      
+000010AA                           152      
+000010AA  206F 0020                153      move.l  FILE_ADDRESS(sp),a0
+000010AE                           154      
+000010AE                           155      ;---
+000010AE                           156      ;SEARCH HEADER FOR SECTION OFFSET
+000010AE                           157      ;---  
+000010AE                           158      
+000010AE                           159      ;ERROR IF SECTION NUM > SECTIONS
+000010AE  2028 0000                160      move.l  HEADER_SECTIONS(a0),d0
+000010B2  4EB8 1014                161      jsr     Long_ToBigEndian
+000010B6  B0AF 0000                162      cmp.l   SECTION(sp),d0
+000010BA  6D00 0122                163      BLT     .rs_SectToHigh              ;If Section requested is out of range, say so and exit
+000010BE                           164      
+000010BE                           165      ;Print Section Header to Output
+000010BE  43F9 0000DCF4            166      lea     S_Section,a1
+000010C4  700E                     167      move.l  #DISPLAY_STRING_NCR,d0
+000010C6  4E4F                     168      TRAP    #15
+000010C8                           169      
+000010C8  202F 0000                170      move.l  SECTION(sp),d0
+000010CC  4EB8 1000                171      jsr     PrintNum
+000010D0                           172      
+000010D0  43F9 0000DCF3            173      lea     NewLine,a1
+000010D6  700D                     174      move.l  #DISPLAY_STRING_CR,d0
+000010D8  4E4F                     175      TRAP    #15
+000010DA                           176      
+000010DA                           177      ;Get Offset of Section
+000010DA  202F 0000                178      move.l  SECTION(sp),d0          ;Get what section we are going for
+000010DE  C0FC 0004                179      mulu.w  #HEADER_SECT_SIZE,d0    ;Multiply by size of section size in header
+000010E2  D1C0                     180      add.l   d0,a0                   ;Add to offset  
+000010E4                           181      
+000010E4                           182      ;Set a0 to Section Start
+000010E4  2010                     183      move.l  (a0),d0                 ;Get offset value
+000010E6  206F 0020                184      move.l   FILE_ADDRESS(sp),a0    ;Rest a0 to start of header
+000010EA  4EB8 1014                185      jsr     Long_ToBigEndian        ;Transfer to Lil Endian
+000010EE  D1C0                     186      add.l   d0,a0                   ;Increment by offset
+000010F0                           187      
+000010F0                           188      ;---
+000010F0                           189      ;PARSE SECTION
+000010F0                           190      ;---
+000010F0                           191      
+000010F0                           192      ;---
+000010F0                           193      ;PARSE BYTES
+000010F0                           194      ;---
+000010F0  2448                     195      move.l  a0,a2
+000010F2  4286                     196      clr.l   d6
+000010F4  4287                     197      clr.l   d7
+000010F6  3C28 0002                198      move.w  SECT_BYTE_OFFSET(a0),d6
+000010FA  E15E                     199      rol.w   #08,d6
+000010FC  3E28 0004                200      move.w  SECT_BYTE_SIZE(a0),d7
+00001100  E15F                     201      rol.w   #08,d7
+00001102                           202      
+00001102                           203      ;# of Bytes to Output
+00001102  2007                     204      move.l  d7,d0
+00001104  4EB8 1000                205      jsr     PrintNum
+00001108  2E00                     206      move.l  d0,d7
+0000110A                           207      
+0000110A                           208      ;Bytes filler string
+0000110A  43F9 0000DCFD            209      lea     S_Bytes,a1
+00001110  700E                     210      move.l  #DISPLAY_STRING_NCR,d0
+00001112  4E4F                     211      TRAP    #15
+00001114                           212      
+00001114  4280                     213      clr.l   d0
+00001116  4283                     214      clr.l   d3      ;For average holding
+00001118  D5C6                     215      add.l   d6,a2   ;add offset from header to section header address holder 
+0000111A  2207                     216      move.l  d7,d1   ;Iterate on d1
+0000111C                           217      
+0000111C                           218  .rs_byteAvg   
+0000111C                           219      
+0000111C  101A                     220      move.b  (a2)+,d0    ;Get byte, store in d0
+0000111E  D680                     221      add.l   d0,d3       ;add byte to d3 for average
+00001120                           222      
+00001120  5381                     223      subi.l  #1,d1
+00001122  66F8                     224      BNE     .rs_byteAvg
+00001124                           225      
+00001124  86C7                     226      divu.w  d7,d3       ;Divide total average (d3, long) by size (d7)
+00001126                           227      
+00001126                           228      ;Print the float value (2 decimal places)
+00001126  2003                     229      move.l  d3,d0
+00001128  2207                     230      move.l  d7,d1
+0000112A  4EB8 1020                231      jsr     PrintFloat
+0000112E                           232      
+0000112E  43F9 0000DCF3            233      lea     NewLine,a1
+00001134  700D                     234      move.l  #DISPLAY_STRING_CR,d0
+00001136  4E4F                     235      TRAP    #15
+00001138                           236      
+00001138                           237      ;---
+00001138                           238      ;PARSE SHORTS
+00001138                           239      ;---    
+00001138  2448                     240      move.l  a0,a2
+0000113A  4286                     241      clr.l   d6
+0000113C  4287                     242      clr.l   d7
+0000113E  3C28 0006                243      move.w  SECT_WORD_OFFSET(a0),d6
+00001142  E15E                     244      rol.w   #08,d6
+00001144  3E28 0008                245      move.w  SECT_WORD_SIZE(a0),d7
+00001148  E15F                     246      rol.w   #08,d7
+0000114A                           247      
+0000114A                           248      ;# of Shorts to Output
+0000114A  2007                     249      move.l  d7,d0
+0000114C  4EB8 1000                250      jsr     PrintNum
+00001150  2E00                     251      move.l  d0,d7
+00001152                           252      
+00001152                           253      ;Shorts filler string
+00001152  43F9 0000DD14            254      lea     S_Shorts,a1
+00001158  700E                     255      move.l  #DISPLAY_STRING_NCR,d0
+0000115A  4E4F                     256      TRAP    #15
+0000115C                           257      
+0000115C  4280                     258      clr.l   d0
+0000115E  4283                     259      clr.l   d3      ;For average holding
+00001160  D5C6                     260      add.l   d6,a2   ;add offset from header to section header address holder 
+00001162  2207                     261      move.l  d7,d1   ;Iterate on d1
+00001164                           262      
+00001164                           263  .rs_shortAvg
+00001164  301A                     264      move.w  (a2)+,d0    ;Get short, store in d0
+00001166  E158                     265      rol.w   #08,d0      ;In Little Endian, convert to Big
+00001168  D680                     266      add.l   d0,d3       ;add short to d3 for average
+0000116A                           267      
+0000116A  5381                     268      subi.l  #1,d1
+0000116C  66F6                     269      BNE     .rs_shortAvg
+0000116E                           270      
+0000116E  86C7                     271      divu.w  d7,d3       ;Divide total average (d3, long) by size (d7)
+00001170                           272      
+00001170                           273      ;Print the float value (2 decimal places)
+00001170  2003                     274      move.l  d3,d0
+00001172  2207                     275      move.l  d7,d1
+00001174  4EB8 1020                276      jsr     PrintFloat
+00001178                           277      
+00001178  43F9 0000DCF3            278      lea     NewLine,a1
+0000117E  700D                     279      move.l  #DISPLAY_STRING_CR,d0
+00001180  4E4F                     280      TRAP    #15
+00001182                           281      
+00001182                           282      ;---
+00001182                           283      ;PARSE LONGS
+00001182                           284      ;---
+00001182  2448                     285      move.l  a0,a2
+00001184  4286                     286      clr.l   d6
+00001186  4287                     287      clr.l   d7
+00001188  3C28 000A                288      move.w  SECT_LONG_OFFSET(a0),d6
+0000118C  E15E                     289      rol.w   #08,d6
+0000118E  3E28 000C                290      move.w  SECT_LONG_SIZE(a0),d7
+00001192  E15F                     291      rol.w   #08,d7
+00001194                           292      
+00001194                           293      ;# of Longs to Output
+00001194  2007                     294      move.l  d7,d0
+00001196  4EB8 1000                295      jsr     PrintNum
+0000119A  2E00                     296      move.l  d0,d7
+0000119C                           297      
+0000119C                           298      ;Longs filler string
+0000119C  43F9 0000DD2C            299      lea     S_Longs,a1
+000011A2  700E                     300      move.l  #DISPLAY_STRING_NCR,d0
+000011A4  4E4F                     301      TRAP    #15
+000011A6                           302      
+000011A6  4280                     303      clr.l   d0
+000011A8  4283                     304      clr.l   d3      ;For average holding
+000011AA  D5C6                     305      add.l   d6,a2   ;add offset from header to section header address holder 
+000011AC  2207                     306      move.l  d7,d1   ;Iterate on d1
+000011AE                           307      
+000011AE                           308  .rs_longAvg
+000011AE  201A                     309      move.l  (a2)+,d0            ;Get Long, store in d0
+000011B0  4EB8 1014                310      jsr     Long_ToBigEndian    ;In Little Endian, convert to Big
+000011B4  D680                     311      add.l   d0,d3               ;add long to d3 for average
+000011B6                           312      
+000011B6  5381                     313      subi.l  #1,d1
+000011B8  66F4                     314      BNE     .rs_longAvg
+000011BA                           315      
+000011BA  86C7                     316      divu.w  d7,d3       ;Divide total average (d3, long) by size (d7)
+000011BC                           317      
+000011BC                           318      ;Print the float value (2 decimal places)
+000011BC  2003                     319      move.l  d3,d0
+000011BE  2207                     320      move.l  d7,d1
+000011C0  4EB8 1020                321      jsr     PrintFloat
+000011C4                           322      
+000011C4  43F9 0000DCF3            323      lea     NewLine,a1
+000011CA  700D                     324      move.l  #DISPLAY_STRING_CR,d0
+000011CC  4E4F                     325      TRAP    #15
+000011CE                           326      
+000011CE                           327  .rs_exit    
+000011CE                           328  
+000011CE  43F9 0000DCF3            329      lea     NewLine,a1
+000011D4  700D                     330      move.l  #DISPLAY_STRING_CR,d0
+000011D6  4E4F                     331      TRAP    #15
+000011D8                           332      
+000011D8  4CDF 7FFF                333      movem.l (sp)+,ALL_REG
+000011DC  4E75                     334      rts
+000011DE                           335  
+000011DE                           336  .rs_sectToHigh
+000011DE                           337      
+000011DE  43F9 0000DCF3            338      lea     NewLine,a1
+000011E4  700D                     339      move.l  #DISPLAY_STRING_CR,d0
+000011E6  4E4F                     340      TRAP    #15
+000011E8                           341      
+000011E8  43F9 0000DCCA            342      lea     Sect_OR,a1
+000011EE  700D                     343      move.l  #DISPLAY_STRING_CR,d0
+000011F0  4E4F                     344      TRAP    #15
+000011F2                           345  
+000011F2  60DA                     346      BRA .rs_exit
+000011F4                           347  
+000011F4                           348  
+000011F4                           349  
+000011F4                           350  START:                  ; first instruction of program
+000011F4                           351  
+000011F4                           352  * Put program code here
+000011F4                           353  
+000011F4                           354     
+000011F4  43F9 0000DBF5            355      lea     UserQuery, a1
+000011FA  7012                     356      move.l  #DISPLAY_GETNUM_CR,d0
+000011FC  4E4F                     357      TRAP    #15
+000011FE                           358  
+000011FE                           359  
+000011FE                           360  loop:     
+000011FE  0C81 00000000            361      cmpi.l  #0,d1
+00001204  6D00 0032                362      BLT     InputError
+00001208  0C81 00000000            363      cmpi.l  #0,d1
+0000120E  6700 001A                364      BEQ     exit
+00001212                           365      
+00001212                           366          
+00001212  41F9 00001244            367      lea     FileToRead,a0
+00001218  2001                     368      move.l  d1,d0
+0000121A  4EB8 1098                369      jsr     ReadSection
+0000121E                           370  
+0000121E                           371  errorReturn:
+0000121E  43F9 0000DC3B            372      lea     UserQuery2, a1
+00001224  7012                     373      move.l  #Display_GETNUM_CR,d0
+00001226  4E4F                     374      TRAP    #15
+00001228  60D4                     375      BRA     loop
+0000122A                           376  
+0000122A                           377  exit:
+0000122A  43F9 0000DC88            378      lea     End,a1
+00001230  700D                     379      move.l  #DISPLAY_STRING_CR,d0
+00001232  4E4F                     380      TRAP    #15
+00001234                           381      
+00001234  FFFF FFFF                382      SIMHALT             ; halt simulator
+00001238                           383  
+00001238                           384  
+00001238                           385  InputError:
+00001238                           386  
+00001238  43F9 0000DCA2            387      lea     Input_Error,a1
+0000123E  700D                     388      move.l  #DISPLAY_STRING_CR,d0
+00001240  4E4F                     389      TRAP    #15
+00001242  60DA                     390      BRA     errorReturn
+00001244                           391  
+00001244                           392  
+00001244                           393  * Put variables and constants here
+00001244                           394  
+00001244                           395  FileToRead  INCBIN  "output.bin"
+0000DBE2= 49 6E 70 75 74 20 ...    396  TEST_OUT    dc.b    'Input acknowledged',0
+0000DBF5                           397      
+0000DBF5= 57 68 61 74 20 73 ...    398  UserQuery   dc.b    'What section would you like to see statistics for? (Enter 0 to exit) ',0 
+0000DC3B= 57 68 61 74 20 6F ...    399  UserQuery2  dc.b    'What other sections would you like to see statistics for? (Enter 0 to exit) ',0   
+0000DC88= 45 78 69 74 69 6E ...    400  End         dc.b    'Exiting: Have a nice day!',0
+0000DCA2= 49 6E 70 75 74 20 ...    401  Input_Error dc.b    'Input must be a number and not negative',0
+0000DCCA= 50 72 6F 76 69 64 ...    402  Sect_OR     dc.b    'Provided Section is out of range of file',0
+0000DCF3= 00                       403  NewLine     dc.b    '',0
+0000DCF4                           404  
+0000DCF4                           405  *Output Strings
+0000DCF4= 53 65 63 74 69 6F ...    406  S_Section   dc.b    'Section ',0
+0000DCFD= 20 62 79 74 65 73 ...    407  S_Bytes     dc.b    ' bytes, average value ',0
+0000DD14= 20 73 68 6F 72 74 ...    408  S_Shorts    dc.b    ' shorts, average value ',0
+0000DD2C= 20 6C 6F 6E 67 73 ...    409  S_Longs     dc.b    ' longs, average value ',0
+0000DD43                           410  
+0000DD43= 2E 30 00                 411  S_LeadZero  dc.b    '.0',0
+0000DD46= 2E 00                    412  S_Period    dc.b    '.',0
+0000DD48                           413  
+0000DD48                           414  
+0000DD48                           415  
+0000DD48                           416  
+0000DD48                           417      END    START        ; last line of source
+
+No errors detected
+No warnings generated
+
+
+SYMBOL TABLE INFORMATION
+Symbol-name         Value
+-------------------------
+ALL_REG             7FFF
+CHECKLEADZERO       105E
+CHECKLEADZERO:PF_FLOAT  108C
+CHECKLEADZERO:PF_LEADZERO  1082
+DECIMAL             A
+DISPLAY_GETNUM_CR   12
+DISPLAY_STRING_CR   D
+DISPLAY_STRING_NCR  E
+DISPLAY_UNUM        F
+DIVISOR             4
+DIV_NUM             0
+END                 DC88
+ERRORRETURN         121E
+EXIT                122A
+FILETOREAD          1244
+FILE_ADDRESS        20
+HEADER_SECTIONS     0
+HEADER_SECT_OFFSET  4
+HEADER_SECT_SIZE    4
+INPUTERROR          1238
+INPUT_ERROR         DCA2
+LONG_TOBIGENDIAN    1014
+LOOP                11FE
+NEWLINE             DCF3
+NUM_TO_PRINT        0
+PRINTFLOAT          1020
+PRINTNUM            1000
+READSECTION         1098
+READSECTION:RS_BYTEAVG  111C
+READSECTION:RS_EXIT  11CE
+READSECTION:RS_LONGAVG  11AE
+READSECTION:RS_SECTTOHIGH  11DE
+READSECTION:RS_SHORTAVG  1164
+SECTION             0
+SECT_BYTE_OFFSET    2
+SECT_BYTE_SIZE      4
+SECT_LONG_OFFSET    A
+SECT_LONG_SIZE      C
+SECT_OR             DCCA
+SECT_WORD_OFFSET    6
+SECT_WORD_SIZE      8
+START               11F4
+S_BYTES             DCFD
+S_LEADZERO          DD43
+S_LONGS             DD2C
+S_PERIOD            DD46
+S_SECTION           DCF4
+S_SHORTS            DD14
+TEST_OUT            DBE2
+USERQUERY           DBF5
+USERQUERY2          DC3B
+WORD_TOBIGENDIAN    101C
